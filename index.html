@@ -1,0 +1,645 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>4crt &middot; Four Choice Reaction Time Test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.3/jquery.mobile-1.4.3.min.css" />
+<script src="http://code.jquery.com/jquery-1.11.1.min.js"></script>
+<script src="http://code.jquery.com/mobile/1.4.3/jquery.mobile-1.4.3.min.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/jquery-color/2.1.2/jquery.color.min.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/jszip/2.3.0/jszip.min.js"></script>
+<script src="http://cdn.jsdelivr.net/filesaver.js/0.2/FileSaver.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.2/moment.min.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/idbwrapper/1.4.1/idbstore.min.js"></script>
+<style>
+abbr {
+  border-bottom: 1px dotted #444;
+}
+#test button {
+  font-size: 12.5vh;
+  margin: 5px;
+}
+#test #search {
+  visibility: hidden;
+  margin-top: -8vh;
+  margin-bottom: -8vh;
+  font-size: 30vh;
+  width: 100%;
+  text-align: center;
+}
+#stats table {
+  border-collapse: collapse;
+  empty-cells: show;
+}
+#stats table tbody tr:last-child td,
+#stats table tbody tr:last-child th {
+  border-bottom: 0;
+}
+#stats table tbody tr td,
+#stats table tbody tr th {
+  border-bottom: 1px solid #a6a6a6;
+}
+#stats table tbody tr th {
+  border-right: 1px solid #d6d6d6;
+  padding: 0 10px;
+}
+#stats table tbody tr td {
+  padding-left: 10px;
+}
+#eval-table .ui-icon-delete {
+  opacity: 0;
+  margin-left: 20px;
+}
+#eval-table tr:hover .ui-icon-delete {
+  opacity: 1;
+}
+#eval-table tr.success th {
+  background-color: #afa;
+}
+#eval-table tr.failure th {
+  background-color: #fcc;
+}
+#eval-aggregate th {
+  text-align: right;
+}
+#deleteDialog .ui-icon-delete {
+  background-color: #e44;
+}
+#stats caption {
+  text-align: left;
+  font-size: 150%;
+  margin-bottom: 5px;
+}
+#stats table {
+  margin-bottom: 15px;
+}
+.submit-button {
+  text-align: right;
+}
+#download-archived .ui-flipswitch {
+  width: 7.275em;
+}
+#download-archived .ui-flipswitch.ui-flipswitch-active {
+  padding-left: 5.4em;
+  width: 1.875em;
+}
+#download-archived .ui-btn.ui-flipswitch-on {
+  text-indent: -4.9em;
+}
+#download-archived .ui-flipswitch-off {
+  text-indent: 0.9em;
+}
+#eval-retryable.retryable-true:after {
+  content: "\2714";
+}
+#eval-retryable.retryable-false:after {
+  content: "\2717";
+}
+.button-wrap-r {
+  margin-left: 5px;
+}
+.button-wrap-l {
+  margin-right: 5px
+}
+</style>
+<script>
+var $TRESHOLD = 4000;
+
+var $tests = [];
+var $testStarted;
+var $activeTest;
+var $store = new IDBStore({
+  storeName: "4crt",
+  onStoreReady: function() {
+    $store.get('tests', function(obj) {
+      if (obj) {
+        $tests = obj.tests;
+      }
+    });
+  },
+});
+
+$(function() {
+var $buttonColor;
+
+// Activate iterations convenience buttons on slider
+$("#iterations").change(function() {
+  var value = $(this).val();
+  $("#iterations-conv a").each(function() {
+    if ($(this).data("n") == value) {
+      $(this).addClass("ui-btn-active");
+    } else {
+      $(this).removeClass("ui-btn-active");
+    }
+  });
+}).change();
+
+// Iterations convenience buttons
+$("#iterations-conv a").click(function() {
+  $("#iterations").val($(this).data("n"));
+  $("#iterations").change();
+});
+
+// Main test functionality
+$("#test button").click(function(event) {
+  var elapsed = new Date().getTime() - $testStarted;
+  event.preventDefault();
+  var search = $("#search").text();
+  if (search === "0") {
+  }
+  $activeTest.runs[$activeTest.runs.length-1].splice(0, 0, elapsed);
+  var correct = search === $(this).text();
+  $(this).css("backgroundColor", correct ? "green" : "red");
+  if (!$activeTest.retryable && !correct) {
+    $activeTest.runs.splice(0, 0, Infinity);
+  }
+  if (correct || !$activeTest.retryable) {
+    if ($activeTest.runs.length != $activeTest.length) {
+      newTest();
+    } else {
+      persistData();
+      $("#finishDialog").popup({afterclose: function() {
+        $.mobile.navigate("#stats");
+      }}).popup("open");
+    }
+  }
+  window.setTimeout(function() {
+    $(this).animate({backgroundColor: $buttonColor}, "fast");
+  }.bind(this), 700);
+});
+
+function persistData() {
+  $store.put({id: 'tests', tests: $tests});
+}
+
+// Delete buttons in evaluation view
+$("#delete-this").click(function() {
+  $tests.splice($tests.indexOf($activeTest), 1);
+  persistData();
+  $.mobile.navigate("#config");
+});
+$("#delete-patient").click(function() {
+  $tests = $tests.filter(function(test) {
+    return test.name !== $activeTest.name;
+  });
+  persistData();
+  $.mobile.navigate("#config");
+});
+$("#delete-all").click(function() {
+  $tests.length = 0;
+  persistData();
+  $.mobile.navigate("#config");
+});
+
+// Send email dialog
+$("#sendDialog form [name=mail-to]").change(function(event) {
+  $("#mailto-link").attr("href", "mailto:" + event.target.value
+    + "?subject=" + encodeURIComponent("4crt")
+    + "&body=" + encodeURIComponent(formatData("tsv"))
+  );
+});
+$("#sendDialog").popup({afteropen: function() {
+  this.find("[name=mail-to]").change();
+}});
+
+// Download dialog
+$("#download-link").click(function() {
+  var format = $("[name=download-format][checked]").val();
+  var archived = $("[name=download-archived]").parent().hasClass("ui-flipswitch-active");
+  var content = formatData(format);
+  var name = "data." + format;
+  var download;
+  if (archived) {
+    var zip = new JSZip();
+    zip.file(name, content);
+    download = zip.generate({type: "blob"});
+    name = "data.zip";
+  } else {
+    download = new Blob([content], {type: "text/plain"})
+  }
+  saveAs(download, name);
+});
+
+// Pages
+$(document).on('pagecontainerchange', function(event, ui) {
+  var page = ui.toPage.attr("id");
+  if (page === "test") {
+    $buttonColor = $("#test button").css("backgroundColor");
+    $activeTest = {
+      name: $("#config [name=name]").val() || "n/a",
+      length: $("#config [name=iterations]").val(),
+      // workaround for .val() always giving "on"
+      retryable: $("#config [name=retry]").parent().hasClass("ui-flipswitch-active"),
+      runs: [],
+      begin: moment().format("YYYYMMDD HH:mm"),
+    };
+    $tests.push($activeTest);
+    $("#welcomeDialog").popup({afterclose: newTest}).popup("open");
+  } else if (page === "stats") {
+    refreshStats();
+  }
+});
+
+// View past patients
+$("#viewDialog").popup({afteropen: function() {
+  $("#view-list")
+    .empty()
+    .append($tests.map(function(test, idx) {
+      return $("<li>")
+        .append($("<a>")
+          .text(test.name)
+          .append($("<span>").text(test.begin).addClass("ui-li-count"))
+          .click(function() {
+            $activeTest = $tests[idx];
+            $.mobile.navigate("#stats");
+          })
+        );
+    }))
+    .listview("refresh");
+}});
+
+// Dynamically update all treshold displays
+$(".treshold").text($TRESHOLD / 1000);
+
+
+function newTest() {
+  $("#search").text("0").css("visibility", "hidden");
+  $activeTest.runs.push([]);
+  window.setTimeout(function() {
+    $("#search")
+      .text(Math.floor(Math.random()*4 + 1))
+      .css("visibility", "visible");
+    $testStarted = new Date().getTime();
+  }, Math.floor(2000+Math.random()*2000));
+}
+
+
+function refreshStats() {
+  var len = Math.max.apply(null,
+    $activeTest.runs.map(function(runs) { return runs.length; }))
+  $(".eval-name").text($activeTest.name);
+  $("#eval-table tbody")
+    .empty()
+    .append($activeTest.runs.map(function(runs, idx) {
+      return $("<tr>")
+        .data("index", idx)
+        .addClass(successful(runs) ? "success" : "failure")
+        .append($('<th class="ui-mini">').text("#" + (idx+1)))
+        .append(runs
+          .concat(Array.apply(null, new Array(len-runs.length)))  // fill
+          .map(function(run) {
+            return $("<td>").text(run);
+          })
+        )
+        .append(
+          $('<td><a href="#" class="ui-btn ui-nodisc-icon ui-alt-icon ui-corner-all ui-btn-icon-notext ui-icon-delete ui-btn-inline">Delete</a></td>')
+            .click(function(event) {
+              $activeTest.runs.splice($(event.target).data("index"), 1);
+              $activeTest.length--;
+              refreshStats();
+            })
+        );
+    }));
+  var times = $activeTest.runs.map(function(runs) { return runs[0]; });
+
+  var success = $activeTest.runs.filter(successful).length;
+  var total = $activeTest.length;
+  $("#eval-success").text(success);
+  $("#eval-total").text(total);
+  $("#eval-perc").text(Math.round(success / total * 100));
+
+  $("#eval-best").text(Math.min.apply(null, times));
+  $("#eval-worst").text(Math.max.apply(null, times));
+
+  $("#eval-misses").text($activeTest.runs.reduce(function(a, b) {
+    return a + +(b.length > 1);
+  }, 0));
+  $("#eval-misses-all").text($activeTest.runs.reduce(function(a, b) {
+    return a + b.length-1;
+  }, 0));
+
+  var mean_ = mean(times);
+  var stddev_ = stddev(times, mean_)
+  $("#eval-mean").text(mean_);
+  $("#eval-stddev").text(stddev_.toFixed(2));
+  $("#eval-stderr").text((mean_ / Math.sqrt(stddev_)).toFixed(2));
+
+  $("#eval-retryable").removeClass().addClass("retryable-" + $activeTest.retryable);
+
+  var reactions = $activeTest.runs.map(function(runs) {
+    return runs[runs.length-1];
+  });
+  var meanReact = mean(reactions);
+  var stddevReact = stddev(reactions, meanReact);
+  $("#eval-mean-react").text(meanReact);
+  $("#eval-stddev-react").text(stddevReact.toFixed(2));
+}
+
+function successful(runs) {
+  return runs[0] < $TRESHOLD && runs.length === 1;
+}
+
+function mean(arr) {
+  return arr.reduce(function(a, b) {
+    return a + b
+  }, 0.0) / arr.length;
+}
+function stddev(arr, mean) {
+  return Math.sqrt(arr.reduce(function(a, b) {
+    return a + Math.pow(b - mean, 2);
+  }, 0.0) / arr.length);
+}
+
+
+function formatData(format) {
+  if (format === "json") {
+    return JSON.stringify($tests);
+  } else if (format === "tsv") {
+    return $.map($tests, function(test) {
+      return test.runs.map(function(runs) {
+        return test.name + "\t" + test.begin + "\t" + runs.join("\t");
+      });
+    }).join("\n");
+  }
+}
+
+});
+</script>
+</head>
+<body>
+
+<div data-role="page" id="config">
+  <div data-role="header">
+    <h1>4crt</h1>
+  </div>
+  <div role="main" class="ui-content">
+    <form>
+      <div class="ui-field-contain">
+        <label for="name" class="ui-hidden-accessible">Patient identification:</label>
+        <input type="text" name="name" data-clear-btn="true" placeholder="Patient identification">
+      </div>
+      <div id="iterations-conv" data-role="controlgroup" data-type="horizontal">
+        <a href="#" class="ui-btn" data-n="4">&#9603;</a>
+        <a href="#" class="ui-btn" data-n="10">&#9603;&#9605;</a>
+        <a href="#" class="ui-btn" data-n="15">&#9603;&#9605;&#9607;</a>
+      </div>
+      <a href="#test" data-role="button" data-icon="carat-r" data-iconpos="right" data-theme="b" id="start-button">Start</a>
+      <fieldset data-role="collapsible" class="ui-nodisc-icon ui-alt-icon">
+        <legend>Advanced settings</legend>
+        <div class="ui-field-contain">
+          <label for="iterations">Iterations:</label>
+          <input type="range" id="iterations" name="iterations" min="1" max="20" value="4" data-highlight="true">
+        </div>
+        <div class="ui-field-contain">
+          <label for="retry">Retry until correct:</label>
+          <input type="checkbox" name="retry" data-role="flipswitch" checked="">
+        </div>
+      </fieldset>
+    </form>
+
+    <div data-role="popup" id="sendDialog" data-overlay-theme="b" data-theme="a" class="ui-content" data-position-to="window">
+      <a href="#" data-rel="back" class="ui-btn ui-corner-all ui-shadow ui-btn-a ui-icon-delete ui-btn-icon-notext ui-btn-right">Close</a>
+      <div data-role="header">
+        <h1>Send email</h1>
+      </div>
+      <div role="main">
+        <p>
+          You can conveniently send all results in plain text format (TSV) by
+          email.
+        </p>
+        <form>
+          <div class="ui-field-contain">
+            <label for="mail-to" class="ui-hidden-accessible">E-mail recipient:</label>
+            <input type="email" placeholder="Recipient" name="mail-to">
+          </div>
+        </form>
+        <div class="submit-button">
+          <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-icon-action ui-btn-icon-right" id="mailto-link">Send</a>
+        </div>
+      </div>
+    </div>
+
+    <div data-role="popup" id="viewDialog" data-overlay-theme="b" data-theme="a" class="ui-content" data-position-to="window">
+      <a href="#" data-rel="back" class="ui-btn ui-corner-all ui-shadow ui-btn-a ui-icon-delete ui-btn-icon-notext ui-btn-right">Close</a>
+      <div data-role="header">
+        <h1>View past tests</h1>
+      </div>
+      <div role="main">
+        <ol data-role="listview" id="view-list" data-inset="true" data-filter="true" data-filter-placeholder="Search patients&hellip;">
+        </ol>
+      </div>
+    </div>
+
+    <div data-role="popup" id="downloadDialog" data-overlay-theme="b" data-theme="a" class="ui-content" data-position-to="window">
+      <a href="#" data-rel="back" class="ui-btn ui-corner-all ui-shadow ui-btn-a ui-icon-delete ui-btn-icon-notext ui-btn-right">Close</a>
+      <div data-role="header">
+        <h1>Download</h1>
+      </div>
+      <div role="main">
+        <p>
+          You can conveniently download all results in <abbr title="JavaScript
+          Object Notation">JSON</abbr> or <abbr title="Tab-Separated Values">
+          TSV</abbr> format.  The best way to get these out of your browser is
+          pasting them or downloading the archive.
+        </p>
+        <form>
+          <div class="ui-field-contain">
+            <fieldset data-role="controlgroup" data-type="horizontal" data-mini="true" data-corners="all">
+              <legend class="ui-hidden-accessible">Format:</legend>
+              <label>
+                <input type="radio" name="download-format" value="json">
+                JSON
+              </label>
+              <label>
+                <input type="radio" name="download-format" value="tsv" checked="checked">
+                TSV
+              </label>
+            </fieldset>
+          </div>
+          <div class="ui-field-contain" id="download-archived">
+            <label for="download-archived" class="ui-hidden-accessible">Archived:</label>
+            <input type="checkbox" name="download-archived" data-role="flipswitch" data-off-text="Plain" data-on-text="Archived">
+          </div>
+          <div class="submit-button">
+            <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-icon-arrow-d ui-btn-icon-right" id="download-link">Download</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+  <div data-role="footer" data-position="fixed">
+    <div data-role="navbar">
+      <ul>
+        <li><a href="#downloadDialog" data-icon="arrow-d" data-rel="popup">
+          Download
+        </a></li>
+        <li><a href="#sendDialog" data-icon="mail" data-rel="popup">
+          Send
+        </a></li>
+        <li><a href="#viewDialog" data-icon="eye" data-rel="popup">
+          View
+        </a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div data-role="page" data-theme="b" id="test">
+  <div role="main" class="ui-content">
+
+    <div data-role="popup" id="welcomeDialog" data-overlay-theme="a" data-theme="a" class="ui-content">
+      <div data-role="header" data-theme="b">
+        <h1>Welcome</h1>
+      </div>
+      <div role="main">
+        <p>
+          Welcome to the <em>Four Choice Reaction Time</em> test.  In the
+          following, you will be shown a couple of numbers successively.  Try
+          to press the corresponding button as fast as you can when the number
+          appears.
+        </p>
+        <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline" data-rel="back">
+          Start
+        </a>
+      </div>
+    </div>
+
+    <div data-role="popup" id="finishDialog" data-overlay-theme="a" data-theme="a" class="ui-content">
+      <div data-role="header">
+        <h1>Finished</h1>
+      </div>
+      <div role="main">
+        <h4>
+          Thanks for taking the test!
+        </h4>
+        <p>
+          Please hand back the device to your attending doctor now.
+        </p>
+      </div>
+    </div>
+
+
+    <div id="search">0</div>
+    <form>
+      <div class="ui-grid-a">
+        <div class="ui-block-a">
+          <div class="button-wrap-l"><button>1</button></div>
+        </div>
+        <div class="ui-block-b">
+          <div class="button-wrap-r"><button>2</button></div>
+        </div>
+      </div>
+      <div class="ui-grid-a">
+        <div class="ui-block-a">
+          <div class="button-wrap-l"><button>3</button></div>
+        </div>
+        <div class="ui-block-b">
+          <div class="button-wrap-r"><button>4</button></div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div data-role="page" id="stats">
+  <div data-role="header" data-position="fixed" data-id="stats-header">
+    <h1>Evaluation
+      <span class="ui-mini">for
+        <span class="eval-name">last patient</span>
+      </span>
+    </h1>
+  </div>
+  <div role="main" class="ui-content">
+
+    <div data-role="popup" id="deleteDialog" data-overlay-theme="a" data-theme="b" class="ui-content" data-position-to="window">
+      <div data-role="header" data-theme="b">
+        <h1>Really delete?</h1>
+      </div>
+      <div role="main">
+        <p>
+          Deleting an evaluation means all data from that test is gone forever.
+        </p>
+        <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-icon-delete ui-btn-icon-left" id="delete-this">Delete</a>
+        <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-icon-delete ui-btn-icon-left" id="delete-all">Erase all</a>
+        <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-icon-delete ui-btn-icon-left" id="delete-patient">Forget patient</a>
+        <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline" data-rel="back">Cancel</a>
+      </div>
+    </div>
+
+    <table id="eval-aggregate">
+      <caption>Aggregates</caption>
+      <tr>
+        <th>
+          Successful
+          <span class="ui-mini">(&lt;<span class="treshold"></span>s)</span>
+        </th>
+        <td>
+          <span id="eval-success"></span>
+          /
+          <span id="eval-total"></span>
+          (<span id="eval-perc"></span>%)
+        </td>
+      </tr>
+      <tr>
+        <th>Best</th>
+        <td><span id="eval-best"></span>ms</td>
+      </tr>
+      <tr>
+        <th>Worst</th>
+        <td><span id="eval-worst"></span>ms</td>
+      </tr>
+      <tr>
+        <th>Misses</th>
+        <td>
+          <span id="eval-misses"></span>
+          (<span id="eval-misses-all"></span>)
+        </td>
+      </tr>
+      <tr>
+        <th>&Oslash; Mean</th>
+        <td><span id="eval-mean"></span>ms</td>
+      </tr>
+      <tr>
+        <th>&sigma; Standard dev/</th>
+        <td>&plusmn;<span id="eval-stddev"></span></td>
+      </tr>
+      <tr>
+        <th>Standard error</th>
+        <td id="eval-stderr"></td>
+      </tr>
+      <tr>
+        <th>Reaction time</th>
+        <td>
+          <span id="eval-mean-react"></span>ms
+          (&plusmn;<span id="eval-stddev-react"></span>)
+        </td>
+      </tr>
+      <tr>
+        <th>Retryable?</th>
+        <td><span id="eval-retryable"></span></td>
+      </tr>
+    </table>
+    <table id="eval-table">
+      <caption>Raw data</caption>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div data-role="footer" data-position="fixed">
+    <div data-role="navbar" data-iconpos="left">
+      <ul>
+        <li><a href="#config" data-icon="arrow-l">
+          Reset
+        </a></li>
+        <li><a href="#deleteDialog" data-icon="delete" data-rel="popup">
+          Delete
+        </a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
