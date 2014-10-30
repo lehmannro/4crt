@@ -81,17 +81,17 @@ abbr {
 .submit-button {
   text-align: right;
 }
-#download-archived .ui-flipswitch {
+#download-ui-archived .ui-flipswitch {
   width: 7.275em;
 }
-#download-archived .ui-flipswitch.ui-flipswitch-active {
+#download-ui-archived .ui-flipswitch.ui-flipswitch-active {
   padding-left: 5.4em;
   width: 1.875em;
 }
-#download-archived .ui-btn.ui-flipswitch-on {
+#download-ui-archived .ui-btn.ui-flipswitch-on {
   text-indent: -4.9em;
 }
-#download-archived .ui-flipswitch-off {
+#download-ui-archived .ui-flipswitch-off {
   text-indent: 0.9em;
 }
 #eval-retryable.retryable-true:after {
@@ -197,20 +197,20 @@ $("#delete-all").click(function() {
 });
 
 // Send email dialog
-$("#sendDialog form [name=mail-to]").change(function(event) {
+$("#mail-to").change(function(event) {
   $("#mailto-link").attr("href", "mailto:" + event.target.value
     + "?subject=" + encodeURIComponent("4crt")
     + "&body=" + encodeURIComponent(formatData("tsv"))
   );
 });
 $("#sendDialog").popup({afteropen: function() {
-  this.find("[name=mail-to]").change();
+  this.find("#mail-to").change();
 }});
 
 // Download dialog
 $("#download-link").click(function() {
   var format = $("[name=download-format][checked]").val();
-  var archived = $("[name=download-archived]").parent().hasClass("ui-flipswitch-active");
+  var archived = $("#download-archived").parent().hasClass("ui-flipswitch-active");
   var content = formatData(format);
   var name = "data." + format;
   var download;
@@ -231,10 +231,10 @@ $(document).on('pagecontainerchange', function(event, ui) {
   if (page === "test") {
     $buttonColor = $("#test button").css("backgroundColor");
     $activeTest = {
-      name: $("#config [name=name]").val() || "n/a",
-      length: $("#config [name=iterations]").val(),
+      name: $("#config-name").val() || "n/a",
+      length: $("#config-iterations").val(),
       // workaround for .val() always giving "on"
-      retryable: $("#config [name=retry]").parent().hasClass("ui-flipswitch-active"),
+      retryable: $("#config-retry").parent().hasClass("ui-flipswitch-active"),
       runs: [],
       begin: moment().format("YYYYMMDD HH:mm"),
     };
@@ -380,8 +380,10 @@ function formatData(format) {
   <div role="main" class="ui-content">
     <form>
       <div class="ui-field-contain">
-        <label for="name" class="ui-hidden-accessible">Patient identification:</label>
-        <input type="text" name="name" data-clear-btn="true" placeholder="Patient identification">
+        <label for="config-name" class="ui-hidden-accessible">
+          Patient identification:
+        </label>
+        <input type="text" id="config-name" data-clear-btn="true" placeholder="Patient identification">
       </div>
       <div id="iterations-conv" data-role="controlgroup" data-type="horizontal">
         <a href="#" class="ui-btn" data-n="4">&#9603;</a>
@@ -392,12 +394,12 @@ function formatData(format) {
       <fieldset data-role="collapsible" class="ui-nodisc-icon ui-alt-icon">
         <legend>Advanced settings</legend>
         <div class="ui-field-contain">
-          <label for="iterations">Iterations:</label>
-          <input type="range" id="iterations" name="iterations" min="1" max="20" value="4" data-highlight="true">
+          <label for="config-iterations">Iterations:</label>
+          <input type="range" id="config-iterations" min="1" max="20" value="4" data-highlight="true">
         </div>
         <div class="ui-field-contain">
-          <label for="retry">Retry until correct:</label>
-          <input type="checkbox" name="retry" data-role="flipswitch" checked="">
+          <label for="config-retry">Retry until correct:</label>
+          <input type="checkbox" id="config-retry" data-role="flipswitch" checked="">
         </div>
       </fieldset>
     </form>
@@ -415,7 +417,7 @@ function formatData(format) {
         <form>
           <div class="ui-field-contain">
             <label for="mail-to" class="ui-hidden-accessible">E-mail recipient:</label>
-            <input type="email" placeholder="Recipient" name="mail-to">
+            <input type="email" placeholder="Recipient" id="mail-to">
           </div>
         </form>
         <div class="submit-button">
@@ -461,9 +463,9 @@ function formatData(format) {
               </label>
             </fieldset>
           </div>
-          <div class="ui-field-contain" id="download-archived">
+          <div class="ui-field-contain" id="download-ui-archived">
             <label for="download-archived" class="ui-hidden-accessible">Archived:</label>
-            <input type="checkbox" name="download-archived" data-role="flipswitch" data-off-text="Plain" data-on-text="Archived">
+            <input type="checkbox" id="download-archived" data-role="flipswitch" data-off-text="Plain" data-on-text="Archived">
           </div>
           <div class="submit-button">
             <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-icon-arrow-d ui-btn-icon-right" id="download-link">Download</a>
