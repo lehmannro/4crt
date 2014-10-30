@@ -128,7 +128,7 @@ $(function() {
 var $buttonColor;
 
 // Activate iterations convenience buttons on slider
-$("#iterations").change(function() {
+$("#config-iterations").change(function() {
   var value = $(this).val();
   $("#iterations-conv a").each(function() {
     if ($(this).data("n") == value) {
@@ -141,8 +141,8 @@ $("#iterations").change(function() {
 
 // Iterations convenience buttons
 $("#iterations-conv a").click(function() {
-  $("#iterations").val($(this).data("n"));
-  $("#iterations").change();
+  $("#config-iterations").val($(this).data("n"));
+  $("#config-iterations").change();
 });
 
 // Main test functionality
